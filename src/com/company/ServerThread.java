@@ -3,6 +3,7 @@ package com.company;
 import com.company.model.Card;
 import com.company.model.Message;
 import com.company.model.Player;
+import com.company.model.StreamOperator;
 import com.company.utilities.CardCalculations;
 import com.company.utilities.RandomNoRepeat;
 import com.google.gson.Gson;
@@ -20,51 +21,31 @@ import static com.company.Main.*;
 
 public class ServerThread extends Thread{
 
-    String line=null;
-    BufferedReader is = null;
-    public PrintWriter os=null;
-    Socket s=null;
+    StreamOperator streamOperator;
     Player player;
     Table table;
     public ServerThread(Socket s){
-        this.s=s;
+        streamOperator=new StreamOperator(s);
         player=new Player("");
     }
 
     public String sendMessage(Message msg) {
         System.out.println("Sent"+msg.getMessage());
-        os.println(msg.getMessage());
+        streamOperator.send(msg.getMessage());
         return null;
     }
 
     public void run() {
-        try{
-            is= new BufferedReader(new InputStreamReader(s.getInputStream()));
-            os=new PrintWriter(s.getOutputStream(), true);
-        }catch(IOException e){
-            System.out.println("IO error in server thread");
-        }
-
         startGameLoop();
     }
 
     private void startGameLoop() {
         while(true){
-            try {
-                line=is.readLine();
-                boolean serverStatus = serverPrepareResponse(line);
-                if(!serverStatus){
-                    System.out.println("Response"+player.getPlayerId()+" was not perfect");
-                    responseServerInfo();
-                    break;
-                }
-                System.out.println(line);
-            } catch (IOException e) {
-                line=this.getName();
-                System.out.println("IO Error/ Client "+line+" terminated abruptly");
-                responseAll("MESSAGE",player.getPlayerId()+" has left game");
+            boolean serverStatus = serverPrepareResponse(streamOperator.getLine());
+            if(!serverStatus){
+                System.out.println("Response"+player.getPlayerId()+" was not perfect");
+                responseServerInfo();
                 break;
-
             }
         }
     }
