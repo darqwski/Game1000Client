@@ -139,7 +139,6 @@ public class ServerThread extends Thread{
         int startingIndex = new Random().nextInt(playerNumber);
         table.setStartingIndex(startingIndex);
         giveCards();
-        System.out.println(table.getCurrentPlayerName()+" is declaring");
         table.setCurrentDeclarator(table.getCurrentPlayerName());
         table.setAlreadyDeclared(new ArrayList<>());
         table.addToDeclarators(table.getCurrentPlayerName());
@@ -178,17 +177,11 @@ public class ServerThread extends Thread{
         for(int i = 0;i< serverThreads.size();i++){
             ServerThread serverThread = serverThreads.get(i);
             ArrayList<Card> userSet= new ArrayList<>();
-            boolean hasMove = false;
             for(int j=1;j<cards.size()/table.getPlayers().size();j++){
                 userSet.add(cards.get(random.getNext()));
             }
-            if(i==table.getStartingIndex()){
-                hasMove=true;
-            }
-
             Gson gson = new Gson();
             HashMap<String, Object> responseKeys=new HashMap<>();
-            responseKeys.put("hasMove",(hasMove));
             responseKeys.put("cards",(userSet));
             responseKeys.put("table",(table));
             serverThread.sendMessage(Message.createPrivateMessage("USER_CARDS",gson.toJson(responseKeys)));
