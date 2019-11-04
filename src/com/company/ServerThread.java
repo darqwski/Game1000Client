@@ -7,11 +7,6 @@ import com.company.model.StreamOperator;
 import com.company.utilities.CardCalculations;
 import com.company.utilities.RandomNoRepeat;
 import com.google.gson.Gson;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,10 +54,7 @@ public class ServerThread extends Thread{
                     joinPlayerToTable(message);
                     break;
                 case "START":
-                    availableTables.get(player.getJoinedTableId()).setPlayerReadyToPlay(player.getPlayerId());
-                    boolean started = availableTables.get(player.getJoinedTableId()).checkGameHasStarted();
-                    responseAll("MESSAGE", message.getUserId() + " is ready to start game");
-                    if (started) startGame();
+                    startGameAction(message);
                     break;
                 case "DECLARE":
                     if(message.getUserId().equals(table.getCurrentPlayerName()))
@@ -72,11 +64,7 @@ public class ServerThread extends Thread{
                     sendExtraCard(message.getText());
                     break;
                 case "PUT_CARD":
-                    if(table.getCurrentPlayerName().equals(message.getUserId()))
-                        updateTableState(message);
-                    else{
-                        responsePrivate("MESSAGE","Nie możesz dodac karty na stoł");
-                    }
+                        giveCardOnTable(message);
                     break;
             }
         }catch (Exception e){
@@ -86,25 +74,26 @@ public class ServerThread extends Thread{
         return true;
     }
 
+    private void startGameAction(Message message) {
+        availableTables.get(player.getJoinedTableId()).setPlayerReadyToPlay(player.getPlayerId());
+        boolean started = availableTables.get(player.getJoinedTableId()).checkGameHasStarted();
+        responseAll("MESSAGE", message.getUserId() + " is ready to start game");
+        if (started) startGame();
+    }
+
     public void sendExtraCard(String text) {
         String playerId = table.getNextHasReceived();
+        Message extraCardMessage = new Message();
+        extraCardMessage.setType("GIVE_EXTRA_CARD");
+        extraCardMessage.setText(text);
         if(playerId.equals(table.getCurrentPlayerName())){
             if(table.getCurrentReceivedPlayerIndex() < table.getPlayers().size()){
-                playerId = table.getNextHasReceived();
-                Message message = new Message();
-                message.setType("GIVE_EXTRA_CARD");
-                message.setText(text);
-                sendMessageToPlayer(playerId,message);
+                sendMessageToPlayer(table.getNextHasReceived(),extraCardMessage);
             }
         }
         else {
-            Message message = new Message();
-            message.setType("GIVE_EXTRA_CARD");
-            message.setText(text);
-            sendMessageToPlayer(playerId,message);
+            sendMessageToPlayer(playerId,extraCardMessage);
         }
-        System.out.println("Current index "+String.valueOf(table.getCurrentReceivedPlayerIndex()));
-        System.out.println("Playes "+String.valueOf(table.getPlayers().size()));
 
         if(table.getCurrentReceivedPlayerIndex() + 1 < table.getPlayers().size()){
             if(table.getPlayerIds().get(table.getCurrentReceivedPlayerIndex()+1).equals(table.getCurrentDeclarator())){
@@ -130,18 +119,14 @@ public class ServerThread extends Thread{
 
     private void startGame() {
         responseAll("MESSAGE","Game has started");
+        table.createGameQueue();
         prepareRound();
     }
 
     private void prepareRound() {
         table.clearTable();
-        int playerNumber = availableTables.get(this.player.getJoinedTableId()).getPlayers().size();
-        int startingIndex = new Random().nextInt(playerNumber);
-        table.setStartingIndex(startingIndex);
+        table.getNextPlayerToStartRound();
         giveCards();
-        table.setCurrentDeclarator(table.getCurrentPlayerName());
-        table.setAlreadyDeclared(new ArrayList<>());
-        table.addToDeclarators(table.getCurrentPlayerName());
         sendMessageToCurrentPlayer("DECLARE","POINTS");
     }
 
@@ -168,7 +153,6 @@ public class ServerThread extends Thread{
     public void giveCards(){
         ArrayList<Card> cards = Card.generateCards();
         RandomNoRepeat random = new RandomNoRepeat(cards.size());
-        table.setTriumph(0);
         ArrayList<Card> onExtra = new ArrayList<>();
         for(int i = 0;i< serverThreads.size();i++)
             onExtra.add(cards.get(random.getNext()));
@@ -195,7 +179,10 @@ public class ServerThread extends Thread{
         responseAll("MESSAGE",table.getCurrentPlayerName()+" has declared "+String.valueOf(table.getHighestDeclaration()));
     }
 
-    public void updateTableState(Message message){
+    public void giveCardOnTable(Message message){
+        if(!table.getCurrentPlayerName().equals(message.getUserId()))
+            responsePrivate("MESSAGE","Nie możesz dodac karty na stoł");
+
         String[] cardParts = message.getText().split(":");
         Card card = new Card();
         card.setColor(Integer.parseInt(cardParts[0]));
@@ -216,8 +203,7 @@ public class ServerThread extends Thread{
         if(table.onTable.size()==table.playerIds.size()){
             try {
                 sleep(1000);
-                doCalculations();
-                table.moveTableToStack();
+                table.doCalculations();
                 responseServerInfo();
                 if(table.onStack.size()==24){
                     endRound();
@@ -229,36 +215,18 @@ public class ServerThread extends Thread{
     }
 
     public void receiveDeclarationFromUser(Message message){
-        if(Integer.valueOf(message.getText())> table.getHighestDeclaration()){
-            table.getPlayers().get(table.getCurrentPlayerName()).setDeclaredPoints(Integer.valueOf(message.getText()));
-            table.resetDeclarationList(message.getUserId());
-            table.setHighestDeclaration(Integer.valueOf(message.getText()));
-            table.setCurrentDeclarator(message.getUserId());
-        }else {
-            table.addToDeclarators(message.getUserId());
-        }
+        table.receiveDeclaration(message);
         if(table.getAlreadyDeclared().size()==table.getPlayers().size()){
             startRound();
         }
         else {
             table.setNextPlayer();
             sendMessageToCurrentPlayer("DECLARE","POINTS");
-
         }
     }
 
     private void endRound() {
-        for(String userId : table.getPlayerIds()){
-            int pointsInRound = table.getPlayers().get(userId).getPointsInRound();
-            if(userId.equals(table.playerIds.get(table.getStartingIndex()))){
-                if(pointsInRound>=table.getPlayers().get(userId).getDeclaredPoints())
-                    table.getPlayers().get(userId).savePoints();
-                else
-                    table.getPlayers().get(userId).deletePoints();
-            }else{
-                table.getPlayers().get(userId).savePoints();
-            }
-        }
+        table.givePoints();
         responseServerInfo();
         prepareRound();
     }
@@ -273,18 +241,6 @@ public class ServerThread extends Thread{
 
     public void responsePrivate(String type,String message){
         sendMessage(Message.createPrivateMessage(type,message));
-    }
-
-    public void doCalculations(){
-        CardCalculations cardCalculations = new CardCalculations();
-        cardCalculations.setCards(table.onTable);
-        cardCalculations.setTriumph(table.triumph);
-        Card winner = cardCalculations.findHighestCardBy1000();
-        int points = cardCalculations.calculatePointIn1000();
-        table.setCurrentPlayerName(winner.getUserId());
-        table.setPlayerGivingCardFirst(table.getCurrentPlayerName());
-        System.out.println("Karty zgarnia "+table.getCurrentPlayerName());
-        table.players.get(winner.getUserId()).addPoints(points);
     }
 
     public void responseServerInfo(){

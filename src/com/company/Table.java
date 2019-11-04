@@ -1,7 +1,10 @@
 package com.company;
 
 import com.company.model.Card;
+import com.company.model.Message;
 import com.company.model.Player;
+import com.company.utilities.CardCalculations;
+import com.company.utilities.RandomNoRepeat;
 import com.google.gson.Gson;
 
 import java.util.ArrayList;
@@ -10,6 +13,8 @@ import java.util.HashMap;
 public class Table {
     public static final int DECLARE_PASS = 0;
     HashMap<String, Player> players;
+    ArrayList<Integer> gameQueue;
+    int queuePointer = 0;
     ArrayList<String> playerIds;
     ArrayList<Card> onTable;
     ArrayList<Card> onStack;
@@ -255,9 +260,63 @@ public class Table {
         setHighestDeclaration(0);
         setCurrentDeclarator(null);
         setCurrentReceivedPlayerIndex(0);
+        setTriumph(0);
+        setAlreadyDeclared(new ArrayList<>());
     }
 
     public boolean userCanReport(String userId) {
         return getPlayerGivingCardFirst().equals(userId);
+    }
+
+    public void doCalculations() {
+        CardCalculations cardCalculations = new CardCalculations();
+        cardCalculations.setCards(onTable);
+        cardCalculations.setTriumph(triumph);
+        Card winner = cardCalculations.findHighestCardBy1000();
+        int points = cardCalculations.calculatePointIn1000();
+        setCurrentPlayerName(winner.getUserId());
+        setPlayerGivingCardFirst(getCurrentPlayerName());
+        players.get(winner.getUserId()).addPoints(points);
+        moveTableToStack();
+    }
+
+    public void createGameQueue() {
+        RandomNoRepeat randomNoRepeat = new RandomNoRepeat(playerIds.size());
+        gameQueue = new ArrayList<>();
+           while(gameQueue.size()!=playerIds.size())
+               gameQueue.add(randomNoRepeat.getNext());
+        queuePointer=0;
+    }
+
+    public void getNextPlayerToStartRound(){
+        setStartingIndex(gameQueue.get(queuePointer));
+        queuePointer++;
+        setCurrentDeclarator(getCurrentPlayerName());
+        addToDeclarators(getCurrentPlayerName());
+    }
+
+    public void givePoints() {
+        for(String userId : getPlayerIds()){
+            int pointsInRound = getPlayers().get(userId).getPointsInRound();
+            if(userId.equals(playerIds.get(getStartingIndex()))){
+                if(pointsInRound>=getPlayers().get(userId).getDeclaredPoints())
+                    getPlayers().get(userId).savePoints();
+                else
+                    getPlayers().get(userId).deletePoints();
+            }else{
+                getPlayers().get(userId).savePoints();
+            }
+        }
+    }
+
+    public void receiveDeclaration(Message message) {
+        if(Integer.valueOf(message.getText())> getHighestDeclaration()){
+            getPlayers().get(getCurrentPlayerName()).setDeclaredPoints(Integer.valueOf(message.getText()));
+            resetDeclarationList(message.getUserId());
+            setHighestDeclaration(Integer.valueOf(message.getText()));
+            setCurrentDeclarator(message.getUserId());
+        }else {
+            addToDeclarators(message.getUserId());
+        }
     }
 }
