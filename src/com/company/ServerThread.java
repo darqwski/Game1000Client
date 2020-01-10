@@ -1,5 +1,7 @@
 package com.company;
 
+import com.company.database.DatabaseConnection;
+import com.company.database.GameRecord;
 import com.company.model.Card;
 import com.company.model.Message;
 import com.company.model.Player;
@@ -11,8 +13,10 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
+import java.util.concurrent.BrokenBarrierException;
 
 import static com.company.Main.*;
+import static com.company.Table.DECLARE_PASS;
 
 public class ServerThread extends Thread{
 
@@ -64,7 +68,10 @@ public class ServerThread extends Thread{
                     sendExtraCard(message.getText());
                     break;
                 case "PUT_CARD":
-                        giveCardOnTable(message);
+                    giveCardOnTable(message);
+                    break;
+                case "SHOW_GAMES":
+                    showGames(message);
                     break;
             }
         }catch (Exception e){
@@ -72,6 +79,11 @@ public class ServerThread extends Thread{
             return false;
         }
         return true;
+    }
+
+    private void showGames(Message message) {
+        ArrayList<GameRecord> results =new DatabaseConnection().getData();
+        sendMessageToPlayer(message.getUserId(),Message.createPrivateMessage("SHOW_GAMES",new Gson().toJson(results)));
     }
 
     private void startGameAction(Message message) {
@@ -113,12 +125,16 @@ public class ServerThread extends Thread{
     private void beginCardPlaying(){
         table.setCurrentPlayerName(table.getCurrentDeclarator());
         table.setStartingIndex(table.getCurrentPlayer());
+        table.setOnTable(new ArrayList<>());
+        table.setOnExtra(new ArrayList<>());
+        table.setPlayerGivingCardFirst(table.getCurrentPlayerName());
         sendMessageToPlayer(table.getCurrentPlayerName(),Message.createPrivateMessage("CHANGE_PLAYER_STATUS","PLAYING"));
         responseServerInfo();
     }
 
     private void startGame() {
         responseAll("MESSAGE","Game has started");
+        table.createTableID();
         table.createGameQueue();
         prepareRound();
     }
@@ -176,7 +192,9 @@ public class ServerThread extends Thread{
         table.setCurrentPlayerName(table.getCurrentDeclarator());
         sendMessageToCurrentPlayer("RECEIVE_EXTRA",new Gson().toJson(table.getOnExtra()));
         table.setHasReceivedExtraCard(table.getPlayerIds());
+        table.setOnTable(table.getOnExtra());
         responseAll("MESSAGE",table.getCurrentPlayerName()+" has declared "+String.valueOf(table.getHighestDeclaration()));
+        responseServerInfo();
     }
 
     public void giveCardOnTable(Message message){
@@ -199,14 +217,22 @@ public class ServerThread extends Thread{
 
         table.putCardOnTable(card);
         responseServerInfo();
-
+        try {
+            cyclicBarrier.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (BrokenBarrierException e) {
+            e.printStackTrace();
+        }
         if(table.onTable.size()==table.playerIds.size()){
             try {
                 sleep(1000);
                 table.doCalculations();
                 responseServerInfo();
+                sendDataToServer(message.getUserId());
                 if(table.onStack.size()==24){
-                    endRound();
+                    endRound(message);
+
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -216,6 +242,13 @@ public class ServerThread extends Thread{
 
     public void receiveDeclarationFromUser(Message message){
         table.receiveDeclaration(message);
+        if(Integer.valueOf(message.getText())!=DECLARE_PASS){
+            responseAll("MESSAGE",message.getUserId()+" has declared "+(table.getHighestDeclaration()));
+        }
+        else {
+            responseAll("MESSAGE",message.getUserId()+" passed");
+        }
+        responseServerInfo();
         if(table.getAlreadyDeclared().size()==table.getPlayers().size()){
             startRound();
         }
@@ -225,10 +258,15 @@ public class ServerThread extends Thread{
         }
     }
 
-    private void endRound() {
+    private void endRound(Message message) {
         table.givePoints();
         responseServerInfo();
         prepareRound();
+    }
+
+    private void sendDataToServer(String userID) {
+        System.out.println("Save data");
+        new DatabaseConnection().saveData(table.players.get(userID),table.getTableID());
     }
 
     public void responseAll(String type,String message){

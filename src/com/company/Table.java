@@ -8,7 +8,9 @@ import com.company.utilities.RandomNoRepeat;
 import com.google.gson.Gson;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.Random;
 
 public class Table {
     public static final int DECLARE_PASS = 0;
@@ -29,6 +31,7 @@ public class Table {
     boolean gameStarted;
     int startingIndex;
     int currentPlayer;
+    int tableID;
     String currentPlayerName="";
 
     public int getCurrentReceivedPlayerIndex() {
@@ -37,6 +40,12 @@ public class Table {
 
     public void setCurrentReceivedPlayerIndex(int currentReceivedPlayerIndex) {
         this.currentReceivedPlayerIndex = currentReceivedPlayerIndex;
+    }
+
+    public void createTableID(){
+        Random random = new Random();
+        random.setSeed(new Date().getTime());
+        tableID = random.nextInt();
     }
 
     public ArrayList<String> getHasReceivedExtraCard() {
@@ -318,5 +327,9 @@ public class Table {
         }else {
             addToDeclarators(message.getUserId());
         }
+    }
+
+    public int getTableID() {
+        return tableID;
     }
 }

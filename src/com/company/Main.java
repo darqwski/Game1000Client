@@ -1,5 +1,6 @@
 package com.company;
 
+import com.company.database.DatabaseConnection;
 import com.company.model.Card;
 import com.company.model.Player;
 
@@ -8,6 +9,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+
+import static java.lang.Thread.sleep;
 
 public class Main {
     public static  HashMap<String,Table> availableTables;
@@ -15,6 +20,7 @@ public class Main {
     public static ArrayList<ServerThread> serverThreads;
     public static ArrayList<Card> onTableCards;
     public static ArrayList<Card> onStack;
+    public static CyclicBarrier cyclicBarrier = new CyclicBarrier(2);
 
     public static void main(String args[]){
         Socket s=null;
