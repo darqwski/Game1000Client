@@ -8,5 +8,7 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="io.gsonfire:gson-fire:1.8.2" level="application" />
+    <orderEntry type="library" name="mysql:mysql-connector-java:8.0.17" level="application" />
+    <orderEntry type="library" name="mysql:mysql-connector-java:5.1.5" level="application" />
   </component>
 </module>

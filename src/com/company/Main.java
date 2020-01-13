@@ -1,8 +1,7 @@
 package com.company;
 
 import com.company.database.DatabaseConnection;
-import com.company.model.Card;
-import com.company.model.Player;
+import com.company.model.Question;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -15,26 +14,40 @@ import java.util.concurrent.CyclicBarrier;
 import static java.lang.Thread.sleep;
 
 public class Main {
-    public static  HashMap<String,Table> availableTables;
-    public static  HashMap<String, Player> players;
     public static ArrayList<ServerThread> serverThreads;
-    public static ArrayList<Card> onTableCards;
-    public static ArrayList<Card> onStack;
+    public static ArrayList<Question> questions;
     public static CyclicBarrier cyclicBarrier = new CyclicBarrier(2);
+    public static int indexOfQuestion = 0;
+    public static boolean isCorrectAnswer(String receivedQuestion, String receivedAnswer){
+        try {
+            cyclicBarrier.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (BrokenBarrierException e) {
+            e.printStackTrace();
+        }
+        for (Question question: questions) {
+            if(question.getText().equals(receivedQuestion)){
+                return question.isCorrectAnswer(receivedAnswer);
+            }
 
+        }
+        return false;
+    }
+
+    public static void sendToAll(String message){
+        for (ServerThread serverThread: serverThreads) {
+            serverThread.streamOperator.send(message);
+        }
+    }
     public static void main(String args[]){
+        questions= new DatabaseConnection().getData();
+        indexOfQuestion = questions.size()-1;
         Socket s=null;
         ServerSocket ss2=null;
         System.out.println("Server Listening......");
-        availableTables= new HashMap<>();
         serverThreads = new ArrayList<>();
-        players= new HashMap<>();
-        availableTables.put("Table 1",  new Table().setTableName("Table 1"));
-        availableTables.put("Table 2",  new Table().setTableName("Table 1"));
-        availableTables.put("Table 3",  new Table().setTableName("Table 1"));
-        availableTables.put("Table 4",  new Table().setTableName("Table 1"));
-        onTableCards=new ArrayList<>();
-        onStack=new ArrayList<>();
+
         try{
             ss2 = new ServerSocket(6666);
         }
